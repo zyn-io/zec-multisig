@@ -657,7 +657,7 @@ mod tests {
     /// signature — and it verifies as ordinary ed25519, which is what the
     /// Ed25519 runtime will check.
     #[test]
-    fn the_solana_protocol_round_trips_a_signature_over_the_wire() {
+    fn the_ed25519_protocol_round_trips_a_signature_over_the_wire() {
         use crate::ed25519 as custody;
         let keys: Vec<_> = custody::ceremony(2, 3, &mut rand::rngs::OsRng)
             .unwrap()
@@ -759,7 +759,7 @@ mod tests {
     /// `RemoteEd25519Quorum` that holds no share, and a signature that
     /// verifies. This is the shape a sequencer actually runs.
     #[test]
-    fn a_remote_quorum_signs_for_solana_over_loopback() {
+    fn a_remote_quorum_signs_for_ed25519_over_loopback() {
         use crate::ed25519 as custody;
         use std::sync::{Arc, Mutex};
 
