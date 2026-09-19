@@ -125,7 +125,7 @@ impl std::fmt::Display for PayoutError {
 pub struct Payment {
     pub to: Destination,
     pub zatoshi: u64,
-    /// Carried only by a shielded output. A deposit into a Zyn vault names
+    /// Carried only by a shielded output. A deposit into the vault names
     /// its account here (`crate::memo`).
     pub memo: [u8; 512],
 }

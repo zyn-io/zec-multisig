@@ -1,8 +1,8 @@
 //! Seeing a shielded deposit.
 //!
 //! This is the layer the transparent scaffold in [`crate::zebra`] stands in
-//! for, and the one ZynZap actually intends: a depositor sends **shielded** ZEC
-//! to the vault with a memo naming their Zyn account, and nothing about the
+//! for, and the one this is built for: a depositor sends **shielded** ZEC
+//! to the vault with a memo naming their account, and nothing about the
 //! transaction is public.
 //!
 //! A shielded output says nothing to an observer. Finding ours means trial
@@ -62,7 +62,7 @@ const ZAT: i128 = 10_000_000_000;
 pub enum ScanError {
     /// The bytes were not a transaction this consensus branch can read.
     Undecodable,
-    /// A note decrypted, but its memo was not a Zyn deposit memo.
+    /// A note decrypted, but its memo was not a deposit memo.
     ///
     /// Reported rather than skipped: someone sent the vault shielded funds
     /// without saying who they are for, which is a real deposit that cannot be
@@ -287,13 +287,13 @@ impl VaultKeys {
                 to_index: None,
                 anchor: false,
                 forced: None,
-                cave_payment: None,
-                cave_reserved: false,
+                app_payment: None,
+                app_reserved: false,
             });
             return Ok(()); // not ours, which is almost always the case
         };
         if memo::is_anchor(&memo_bytes) || memo::is_publication(&memo_bytes) {
-            // The vault's own commitment — to a Zyn root, or to a digest it is
+            // The vault's own commitment — to a state root, or to a digest it is
             // publishing so the thing can be shown to predate a block. Money
             // only in the sense that a stamp is: recorded, never credited.
             out.actions.push(ScannedAction {
@@ -306,14 +306,14 @@ impl VaultKeys {
                 memo: Some(memo_bytes.to_vec()),
                 anchor: true,
                 forced: None,
-                cave_payment: None,
-                cave_reserved: false,
+                app_payment: None,
+                app_reserved: false,
             });
             return Ok(());
         }
         let amount = Fixed(note.value().inner() as i128 * ZAT);
-        if let Ok(payment) = memo::decode_cave_payment(&memo_bytes) {
-            out.cave_payments.push(CavePaymentOutput {
+        if let Ok(payment) = memo::decode_app_payment(&memo_bytes) {
+            out.app_payments.push(AppPaymentOutput {
                 txid,
                 height,
                 output_index,
@@ -330,12 +330,12 @@ impl VaultKeys {
                 memo: Some(memo_bytes.to_vec()),
                 anchor: false,
                 forced: None,
-                cave_payment: Some(payment),
-                cave_reserved: true,
+                app_payment: Some(payment),
+                app_reserved: true,
             });
             return Ok(());
         }
-        if memo::has_cave_payment_tag(&memo_bytes) {
+        if memo::has_app_payment_tag(&memo_bytes) {
             if !lenient {
                 return Err(ScanError::UnaddressedDeposit(amount));
             }
@@ -349,8 +349,8 @@ impl VaultKeys {
                 memo: Some(memo_bytes.to_vec()),
                 anchor: false,
                 forced: None,
-                cave_payment: None,
-                cave_reserved: true,
+                app_payment: None,
+                app_reserved: true,
             });
             return Ok(());
         }
@@ -383,8 +383,8 @@ impl VaultKeys {
                     memo: Some(memo_bytes.to_vec()),
                     anchor: false,
                     forced: Some(frame.to_vec()),
-                    cave_payment: None,
-                    cave_reserved: false,
+                    app_payment: None,
+                    app_reserved: false,
                 });
                 return Ok(());
             }
@@ -419,8 +419,8 @@ impl VaultKeys {
             memo: Some(memo_bytes.to_vec()),
             anchor: false,
             forced: None,
-            cave_payment: None,
-            cave_reserved: false,
+            app_payment: None,
+            app_reserved: false,
         });
         Ok(())
     }
@@ -447,7 +447,7 @@ impl VaultKeys {
 pub fn deposit_index(account: &AccountId) -> orchard::keys::DiversifierIndex {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
-    h.update(b"zyn.deposit.index.v1");
+    h.update(b"zec.deposit.index.v1");
     h.update(account);
     let d = h.finalize();
     let mut idx = [0u8; 11];
@@ -499,11 +499,11 @@ pub fn classify_addressed(
     let mut out = Vec::new();
     for a in &scanned.actions {
         let Some(note) = &a.ours else { continue };
-        if a.anchor || a.cave_payment.is_some() {
+        if a.anchor || a.app_payment.is_some() {
             continue;
         }
         let amount = Fixed(note.value().inner() as i128 * ZAT);
-        if a.cave_reserved {
+        if a.app_reserved {
             return Err(amount);
         }
         // Arrived at an account's own deposit address: that settles it.
@@ -564,42 +564,43 @@ pub struct ScannedAction {
     /// it. Zero is the vault's own address; anything else is one account's
     /// deposit address, and says whose the money is without a memo.
     pub to_index: Option<[u8; 11]>,
-    /// The note is the vault's own self-send carrying a Zyn anchor
+    /// The note is the vault`s own self-send carrying a anchor
     /// (`memo::is_anchor`). Never a deposit, never change: evidence.
     pub anchor: bool,
     /// A signed submission the memo carried (`memo::forced_frame`). The note's
     /// value is a deposit to the signer; the frame is for the sequencer to
     /// apply and for a replica to hold it to.
     pub forced: Option<Vec<u8>>,
-    /// A purpose-bound Cave payment. It is surfaced to Cave and is never an
+    /// A purpose-bound application payment. It is surfaced to the application
+    /// and is never an
     /// ordinary account credit, even if it arrived at an issued address.
-    pub cave_payment: Option<memo::CavePaymentMemo>,
-    /// The memo claimed the Cave namespace. If `cave_payment` is absent it was
+    pub app_payment: Option<memo::AppPaymentMemo>,
+    /// The memo claimed the application namespace. If `app_payment` is absent it was
     /// malformed and classification fails instead of crediting by address.
-    pub cave_reserved: bool,
+    pub app_reserved: bool,
 }
 
-/// One purpose-bound Cave payment as seen in canonical transaction order.
+/// One purpose-bound application payment as seen in canonical transaction order.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CavePaymentOutput {
+pub struct AppPaymentOutput {
     pub txid: [u8; 32],
     pub height: u64,
     /// Orchard actions first, followed by Ironwood actions, each in serialized
     /// bundle order. This makes a stable output coordinate within the txid.
     pub output_index: u32,
     pub amount: Fixed,
-    pub payment: memo::CavePaymentMemo,
+    pub payment: memo::AppPaymentMemo,
 }
 
-/// A Cave payment with its complete canonical position in a Zcash block.
+/// An application payment with its complete canonical position in a Zcash block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CavePaymentSighting {
+pub struct AppPaymentSighting {
     pub txid: [u8; 32],
     pub height: u64,
     pub tx_index: u32,
     pub output_index: u32,
     pub amount: Fixed,
-    pub payment: memo::CavePaymentMemo,
+    pub payment: memo::AppPaymentMemo,
 }
 
 /// One forced intent as seen on the chain.
@@ -627,8 +628,8 @@ pub struct Scanned {
     pub actions: Vec<ScannedAction>,
     /// Forced intents this transaction carried.
     pub forced: Vec<ForcedSighting>,
-    /// Valid Cave payments, excluded from `deposits` by construction.
-    pub cave_payments: Vec<CavePaymentOutput>,
+    /// Valid application payments, excluded from `deposits` by construction.
+    pub app_payments: Vec<AppPaymentOutput>,
 }
 
 /// Scanning a range of blocks for deposits to this vault.
@@ -892,15 +893,15 @@ impl Scanner {
         Ok((end, found))
     }
 
-    /// Purpose-bound Cave payments between `from` and `to`, in canonical
+    /// Purpose-bound application payments between `from` and `to`, in canonical
     /// block/transaction/output order. The ordinary bridge excludes these
-    /// notes from account credits; Cave consumes this independent view.
-    pub fn cave_payments(
+    /// notes from account credits; the application consumes this view.
+    pub fn app_payments(
         &self,
         zebra: &crate::zebra::Zebra,
         from: u64,
         to: u64,
-    ) -> Result<(u64, Vec<CavePaymentSighting>), ScanRangeError> {
+    ) -> Result<(u64, Vec<AppPaymentSighting>), ScanRangeError> {
         let start = from.max(self.from_height);
         let end = to.min(start.saturating_add(self.max_blocks).saturating_sub(1));
         let mut found = Vec::new();
@@ -923,9 +924,9 @@ impl Scanner {
                 })?;
                 found.extend(
                     scanned
-                        .cave_payments
+                        .app_payments
                         .into_iter()
-                        .map(|output| CavePaymentSighting {
+                        .map(|output| AppPaymentSighting {
                             txid: output.txid,
                             height: output.height,
                             tx_index,
@@ -1352,7 +1353,7 @@ mod roundtrip {
         );
     }
 
-    /// An anchor is the vault paying itself with a Zyn root in the memo. The
+    /// An anchor is the vault paying itself with a state root in the memo. The
     /// scanner must see it as evidence, not as a deposit and not as a problem.
     #[test]
     fn an_anchor_self_send_is_recognised_and_never_credited() {
@@ -1378,8 +1379,8 @@ mod roundtrip {
             to_index: None,
             anchor: memo::is_anchor(&memo_back),
             forced: None,
-            cave_payment: None,
-            cave_reserved: false,
+            app_payment: None,
+            app_reserved: false,
         });
         // Even in a transaction that does not visibly spend our note and with
         // no attribution, an anchor is not an unaddressed deposit.
@@ -1387,17 +1388,17 @@ mod roundtrip {
     }
 
     #[test]
-    fn a_cave_payment_is_surfaced_once_and_never_credited_to_the_buyer() {
+    fn an_app_payment_is_surfaced_once_and_never_credited_as_a_deposit() {
         let keys = VaultKeys::from_spending_key([7u8; 32]).unwrap();
-        let payment = memo::CavePaymentMemo {
-            purpose: memo::CavePaymentPurpose::Entry,
+        let payment = memo::AppPaymentMemo {
+            purpose: memo::Purpose(1),
             reference: [0x44; 32],
             recipient: [0x55; 32],
         };
-        let encoded = memo::encode_cave_payment(payment).unwrap();
+        let encoded = memo::encode_app_payment(payment).unwrap();
         let (out, domain) = output_with_memo(&keys, encoded, 1_000_000);
         let decrypted = zcash_note_encryption::try_note_decryption(&domain, &keys.ivk, &out)
-            .expect("own Cave payment");
+            .expect("own application payment");
         let note = decrypted.0;
         let index = keys.index_of(&note).unwrap();
         let nf = Nullifier::from_bytes(&[9u8; 32]).unwrap();
@@ -1417,23 +1418,23 @@ mod roundtrip {
         .unwrap();
 
         assert!(scanned.deposits.is_empty());
-        assert_eq!(scanned.cave_payments.len(), 1);
-        assert_eq!(scanned.cave_payments[0].payment, payment);
-        assert_eq!(scanned.cave_payments[0].output_index, 3);
+        assert_eq!(scanned.app_payments.len(), 1);
+        assert_eq!(scanned.app_payments[0].payment, payment);
+        assert_eq!(scanned.app_payments[0].output_index, 3);
         let mut handed_out = BTreeMap::new();
         handed_out.insert(index, payment.recipient);
         assert_eq!(
             classify_addressed(&scanned, false, None, [0x66; 32], 90, &handed_out),
             Ok(vec![]),
-            "an issued address must not turn a Cave payment into buyer credit"
+            "an issued address must not turn an application payment into a deposit"
         );
 
         let mut malformed = encoded;
-        malformed[3] = memo::CAVE_PAYMENT_VERSION + 1;
+        malformed[3] = memo::APP_PAYMENT_VERSION + 1;
         let (bad_out, bad_domain) = output_with_memo(&keys, malformed, 1_000_000);
         let bad_decrypted =
             zcash_note_encryption::try_note_decryption(&bad_domain, &keys.ivk, &bad_out)
-                .expect("own malformed Cave payment");
+                .expect("own malformed application payment");
         let mut lenient = Scanned::default();
         keys.take(
             &mut lenient,
@@ -1448,7 +1449,7 @@ mod roundtrip {
             true,
         )
         .unwrap();
-        assert!(lenient.cave_payments.is_empty());
+        assert!(lenient.app_payments.is_empty());
         assert_eq!(
             classify_addressed(&lenient, false, None, [0x77; 32], 91, &handed_out),
             Err(Fixed::raw(1_000_000 * ZAT)),
@@ -1470,7 +1471,7 @@ mod roundtrip {
         );
     }
 
-    /// Shielded funds with no Zyn memo are visible and unattributable. That is
+    /// Shielded funds with no recognised memo are visible and unattributable. That is
     /// a real event — someone sent the vault money without saying who for —
     /// and it must be reported rather than silently dropped.
     #[test]

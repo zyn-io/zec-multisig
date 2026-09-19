@@ -50,7 +50,7 @@ fn cipher(secret: &StaticSecret, peer: &[u8; 32]) -> ChaCha20Poly1305 {
     let mut key = [0u8; 32];
     // Domain-separate so this key is never confused with a signing input.
     let h = <sha2::Sha256 as sha2::Digest>::new();
-    let h = sha2::Digest::chain_update(h, b"zyn.dkg.seal.v1");
+    let h = sha2::Digest::chain_update(h, b"zec.dkg.seal.v1");
     let h = sha2::Digest::chain_update(h, shared.as_bytes());
     key.copy_from_slice(&sha2::Digest::finalize(h));
     ChaCha20Poly1305::new((&key).into())
@@ -635,7 +635,7 @@ mod net_tests {
     use std::sync::{Arc, Mutex};
 
     /// The same relay, the same rounds, a different curve — and every
-    /// participant must land on one Zyn account. A relay that could only carry
+    /// participant must land on one account. A relay that could only carry
     /// RedPallas would make a threshold treasury a second piece of
     /// infrastructure instead of a second argument.
     #[test]

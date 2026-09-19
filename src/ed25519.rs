@@ -1,7 +1,7 @@
 //! Threshold-controlled Ed25519 accounts, provisioned in one call.
 //!
 //! A treasury is an account no single person can spend from: `t` of `n`
-//! holders must agree. Zyn already had every piece needed for one — the DKG is
+//! holders must agree. Every piece needed for one is already here — the DKG is
 //! generic over ciphersuite, `frost-ed25519` was already a dependency, and the
 //! VM accepts an ordinary Ed25519 signature. What it lacked was a name for the
 //! combination, so provisioning one looked like new cryptography when it was
@@ -32,13 +32,13 @@ pub use frost_core::keys::PublicKeyPackage;
 
 use crate::ceremony::{CeremonyError, IdentifierFor, ThresholdKeys};
 
-/// The ciphersuite a threshold-controlled Zyn account uses: plain Ed25519, so
+/// The ciphersuite a threshold-controlled account uses: plain Ed25519, so
 /// the group's signature is indistinguishable from a single signer's.
 pub type Ed25519Suite = frost_ed25519::Ed25519Sha512;
 
 /// A provisioned treasury: the account it speaks for, and one share per holder.
 pub struct Treasury {
-    /// The 32-byte Zyn account. Pin this — it is the treasury's identity, and
+    /// The 32-byte account. Pin this — it is the treasury's identity, and
     /// every address derived from it moves if it changes.
     pub account: [u8; 32],
     /// The group verifying key, as the chain will see it.

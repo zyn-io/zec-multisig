@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn a_threshold_of_signers_produces_one_valid_signature() {
         let vault = Ceremony::new(7, 10).unwrap().run(&mut OsRng).unwrap();
-        let message = b"zyn anchor id goes here".to_vec();
+        let message = b"anchor id goes here".to_vec();
 
         // Seven of the ten take part.
         let signing: Vec<_> = vault.keys().copied().take(7).collect();

@@ -48,16 +48,36 @@ has not.
 
 ## Compatibility constants
 
-Three identifiers are **wire and storage formats**, not names. Changing any of
-them makes an existing deployment unreadable:
+These are **wire, storage and domain-separation constants**, not names.
+Changing any of them makes an existing deployment unreadable, or silently
+derives different values from the same inputs:
 
-- `memo::MEMO_TAG` (`b"ZEC"`) — the on-chain memo prefix a deposit carries,
-  and `ZEC1:<hex>` in its typed text form
-- `account::ACCOUNT_DOMAIN` (`b"zec.account.v1"`) — defines an account space;
-  two deployments that disagree derive different accounts from the same key
-- `ZECCB1` / `ZECNOTE1` — on-disk magics for the compact-block and note stores
+| constant | value | what it fixes |
+|---|---|---|
+| `memo::MEMO_TAG` | `b"ZEC"` | deposit memo prefix (`ZEC1:<hex>` in typed text form) |
+| `memo::ANCHOR_TAG` | `b"ZEA"` | the vault's self-send carrying a state root |
+| `memo::PUBLISH_TAG` | `b"ZEP"` | a published digest |
+| `memo::FORCED_TAG` | `b"ZEF"` | a forced instruction frame |
+| `memo::APP_PAYMENT_TAG` | `b"ZEB"` | a purpose-bound application payment |
+| `account::ACCOUNT_DOMAIN` | `zec.account.v1` | defines an account space |
+| deposit index domain | `zec.deposit.index.v1` | deposit ordering within a block |
+| DKG seal domain | `zec.dkg.seal.v1` | key derivation for the ceremony transport |
 
 Pick your own values before a first deployment. Never change one after.
+
+## Application payments
+
+`ZEB` is a reserved namespace for payments an application must account for
+separately from ordinary deposits — an invoice, a subscription, a sale. The
+crate fixes the frame (version, purpose byte, 32-byte reference, recipient)
+and leaves the meaning open: **the purpose byte is yours to define**, any
+non-zero value is carried through untouched, and your application refuses the
+codes it does not recognise.
+
+The point is that the two paths can never be confused. A note carrying a `ZEB`
+memo is surfaced as an application payment and is never also credited as a
+deposit, and a *malformed* `ZEB` memo fails closed rather than falling through
+into the deposit path.
 
 ## License
 

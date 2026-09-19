@@ -3,7 +3,7 @@
 //! One file per share plus the public package, for any ciphersuite. A share
 //! file is the whole authority of one participant, so it belongs on that
 //! participant's machine and nowhere else — a directory holding *all* of them
-//! is a devnet holding one key in several pieces, and `zynzapd` says so when
+//! is a devnet holding one key in several pieces, and the node says so when
 //! it loads one.
 
 use std::path::Path;

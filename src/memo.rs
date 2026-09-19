@@ -1,7 +1,7 @@
-//! How a Zcash deposit says which Zyn account it is for.
+//! How a Zcash deposit says which account it is for.
 //!
 //! A shielded deposit carries a 512-byte memo, readable only by a holder of the
-//! vault's viewing key. That is where the recipient's Zyn account goes. It is
+//! vault's viewing key. That is where the recipient`s account goes. It is
 //! not a public leak — the memo is inside the encrypted note, so who can read it
 //! is exactly the question of who holds the viewing key, and nothing more.
 //!
@@ -32,7 +32,7 @@
 
 use crate::account::AccountId;
 
-/// Marks a memo as a Zyn deposit instruction.
+/// Marks a memo as a deposit instruction.
 pub const MEMO_TAG: &[u8; 3] = b"ZEC";
 /// Format version. A memo of another version is refused, not interpreted.
 pub const MEMO_VERSION: u8 = 1;
@@ -41,11 +41,11 @@ pub const MEMO_LEN: usize = 3 + 1 + 32;
 /// A Zcash memo field.
 pub const MEMO_FIELD: usize = 512;
 
-/// The tag of an **anchor** memo — the vault's own self-send carrying a Zyn
-/// state root (`zyn::anchor::MEMO_MAGIC`, kept equal by a test in `zynzapd`).
+/// The tag of an **anchor** memo — the vault`s own self-send carrying a
+/// state root (the anchoring layer commits the same constant).
 /// Distinct from [`MEMO_TAG`] in its first bytes so neither parser can accept
 /// the other's payload.
-pub const ANCHOR_TAG: &[u8; 3] = b"ZYA";
+pub const ANCHOR_TAG: &[u8; 3] = b"ZEA";
 /// tag + version + chain id + epoch + anchor id.
 pub const ANCHOR_LEN: usize = 3 + 1 + 4 + 8 + 32;
 
@@ -61,118 +61,111 @@ pub const ANCHOR_LEN: usize = 3 + 1 + 4 + 8 + 32;
 /// Deliberately the same shape as an anchor — tag, version, digest, zero
 /// padding — so the scanner already treats it the way it treats an anchor:
 /// recorded, never credited. It is money only in the sense that a postmark is.
-pub const PUBLISH_TAG: &[u8; 3] = b"ZYP";
+pub const PUBLISH_TAG: &[u8; 3] = b"ZEP";
 pub const PUBLISH_LEN: usize = 3 + 1 + 32;
 
 /// The tag of a **forced intent**: a signed submission the sequencer must
 /// apply, carried to the vault on a small note because the sequencer's own
 /// door was shut. Distinct in its first bytes from both other tags.
-pub const FORCED_TAG: &[u8; 3] = b"ZYF";
+pub const FORCED_TAG: &[u8; 3] = b"ZEF";
 /// tag + version + length; the frame follows, then zero padding.
 pub const FORCED_HEADER: usize = 3 + 1 + 2;
 /// The most frame a memo can carry.
 pub const FORCED_MAX: usize = MEMO_FIELD - FORCED_HEADER;
 
-/// A Cave sale payment. This is deliberately not a normal `ZEC` deposit:
-/// accepting the same note through both paths would mint buyer credit while
-/// also treating the ZEC as NFT-sale proceeds.
-pub const CAVE_PAYMENT_TAG: &[u8; 3] = b"ZYC";
-/// Cave payment memo version.
-pub const CAVE_PAYMENT_VERSION: u8 = 1;
+/// A purpose-bound application payment. Deliberately not a normal `ZEC`
+/// deposit: accepting one note through both paths would credit an account
+/// while also spending the same ZEC against an application obligation.
+pub const APP_PAYMENT_TAG: &[u8; 3] = b"ZEB";
+/// Application payment memo version.
+pub const APP_PAYMENT_VERSION: u8 = 1;
 /// tag + version + purpose + committed reference + recipient.
-pub const CAVE_PAYMENT_LEN: usize = 3 + 1 + 1 + 32 + 32;
+pub const APP_PAYMENT_LEN: usize = 3 + 1 + 1 + 32 + 32;
 
-/// Why the Cave payment was made. The reference is a policy digest for an
-/// entry and an allocation ticket id for a claim.
+/// Why the payment was made, as the application defines it.
+///
+/// The library fixes the frame and leaves the meaning open: an application
+/// assigns its own codes and refuses the ones it does not recognise. Zero is
+/// reserved, so an all-zero memo can never parse as a valid purpose.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CavePaymentPurpose {
-    Entry,
-    Claim,
-}
+pub struct Purpose(pub u8);
 
-impl CavePaymentPurpose {
+impl Purpose {
     fn code(self) -> u8 {
-        match self {
-            Self::Entry => 1,
-            Self::Claim => 2,
-        }
+        self.0
     }
 
     fn from_code(code: u8) -> Option<Self> {
-        match code {
-            1 => Some(Self::Entry),
-            2 => Some(Self::Claim),
-            _ => None,
-        }
+        (code != 0).then_some(Purpose(code))
     }
 }
 
-/// The application binding carried by a Cave ZEC payment.
+/// The application binding carried by a purpose-bound ZEC payment.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CavePaymentMemo {
-    pub purpose: CavePaymentPurpose,
+pub struct AppPaymentMemo {
+    pub purpose: Purpose,
     pub reference: [u8; 32],
     pub recipient: AccountId,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CavePaymentError {
-    NotCavePayment,
+pub enum AppPaymentError {
+    NotAppPayment,
     UnknownVersion(u8),
-    UnknownPurpose(u8),
+    InvalidPurpose(u8),
     Malformed,
     TrailingBytes,
 }
 
-/// Whether these bytes claim the Cave namespace, valid or not. Callers use
+/// Whether these bytes claim the application namespace, valid or not. Callers use
 /// this to fail closed: a malformed `ZYC` instruction must never fall through
 /// and become an ordinary bridge credit by address attribution.
-pub fn has_cave_payment_tag(memo: &[u8]) -> bool {
-    memo.len() >= 3 && &memo[..3] == CAVE_PAYMENT_TAG
+pub fn has_app_payment_tag(memo: &[u8]) -> bool {
+    memo.len() >= 3 && &memo[..3] == APP_PAYMENT_TAG
 }
 
-/// Build the memo for a purpose-bound Cave payment. Zero references and zero
+/// Build the memo for a purpose-bound application payment. Zero references and zero
 /// recipients are refused because neither can identify a sale obligation.
-pub fn encode_cave_payment(payment: CavePaymentMemo) -> Result<[u8; MEMO_FIELD], CavePaymentError> {
+pub fn encode_app_payment(payment: AppPaymentMemo) -> Result<[u8; MEMO_FIELD], AppPaymentError> {
     if payment.reference == [0; 32] || payment.recipient == [0; 32] {
-        return Err(CavePaymentError::Malformed);
+        return Err(AppPaymentError::Malformed);
     }
     let mut out = [0u8; MEMO_FIELD];
-    out[..3].copy_from_slice(CAVE_PAYMENT_TAG);
-    out[3] = CAVE_PAYMENT_VERSION;
+    out[..3].copy_from_slice(APP_PAYMENT_TAG);
+    out[3] = APP_PAYMENT_VERSION;
     out[4] = payment.purpose.code();
     out[5..37].copy_from_slice(&payment.reference);
-    out[37..CAVE_PAYMENT_LEN].copy_from_slice(&payment.recipient);
+    out[37..APP_PAYMENT_LEN].copy_from_slice(&payment.recipient);
     Ok(out)
 }
 
-/// Parse a Cave payment without ever accepting it as an ordinary bridge
+/// Parse an application payment without ever accepting it as an ordinary
 /// deposit. Like the bridge memo, all bytes after the instruction must be zero.
-pub fn decode_cave_payment(memo: &[u8]) -> Result<CavePaymentMemo, CavePaymentError> {
-    if !has_cave_payment_tag(memo) {
-        return Err(CavePaymentError::NotCavePayment);
+pub fn decode_app_payment(memo: &[u8]) -> Result<AppPaymentMemo, AppPaymentError> {
+    if !has_app_payment_tag(memo) {
+        return Err(AppPaymentError::NotAppPayment);
     }
-    if memo.len() < CAVE_PAYMENT_LEN {
-        return Err(CavePaymentError::Malformed);
+    if memo.len() < APP_PAYMENT_LEN {
+        return Err(AppPaymentError::Malformed);
     }
-    if memo[3] != CAVE_PAYMENT_VERSION {
-        return Err(CavePaymentError::UnknownVersion(memo[3]));
+    if memo[3] != APP_PAYMENT_VERSION {
+        return Err(AppPaymentError::UnknownVersion(memo[3]));
     }
     let purpose =
-        CavePaymentPurpose::from_code(memo[4]).ok_or(CavePaymentError::UnknownPurpose(memo[4]))?;
-    if memo[CAVE_PAYMENT_LEN..].iter().any(|byte| *byte != 0) {
-        return Err(CavePaymentError::TrailingBytes);
+        Purpose::from_code(memo[4]).ok_or(AppPaymentError::InvalidPurpose(memo[4]))?;
+    if memo[APP_PAYMENT_LEN..].iter().any(|byte| *byte != 0) {
+        return Err(AppPaymentError::TrailingBytes);
     }
     let reference = memo[5..37]
         .try_into()
-        .map_err(|_| CavePaymentError::Malformed)?;
-    let recipient = memo[37..CAVE_PAYMENT_LEN]
+        .map_err(|_| AppPaymentError::Malformed)?;
+    let recipient = memo[37..APP_PAYMENT_LEN]
         .try_into()
-        .map_err(|_| CavePaymentError::Malformed)?;
+        .map_err(|_| AppPaymentError::Malformed)?;
     if reference == [0; 32] || recipient == [0; 32] {
-        return Err(CavePaymentError::Malformed);
+        return Err(AppPaymentError::Malformed);
     }
-    Ok(CavePaymentMemo {
+    Ok(AppPaymentMemo {
         purpose,
         reference,
         recipient,
@@ -273,7 +266,7 @@ pub fn is_publication(memo: &[u8]) -> bool {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MemoError {
-    /// Not a Zyn deposit instruction at all — no tag. The overwhelmingly common
+    /// Not a deposit instruction at all — no tag. The overwhelmingly common
     /// case: an empty memo, a wallet default, a note to a human.
     NotADeposit,
     /// Tagged, but a version this build does not know. Refused rather than
@@ -583,51 +576,61 @@ mod tests {
     }
 
     #[test]
-    fn cave_payments_are_strict_and_never_decode_as_buyer_deposits() {
-        for purpose in [CavePaymentPurpose::Entry, CavePaymentPurpose::Claim] {
-            let payment = CavePaymentMemo {
+    fn app_payments_are_strict_and_never_decode_as_deposits() {
+        for purpose in [Purpose(1), Purpose(2)] {
+            let payment = AppPaymentMemo {
                 purpose,
                 reference: [0x44; 32],
                 recipient: [0x55; 32],
             };
-            let memo = encode_cave_payment(payment).unwrap();
-            assert_eq!(decode_cave_payment(&memo), Ok(payment));
+            let memo = encode_app_payment(payment).unwrap();
+            assert_eq!(decode_app_payment(&memo), Ok(payment));
             assert_eq!(decode(&memo), Err(MemoError::NotADeposit));
             assert!(!is_anchor(&memo));
             assert!(forced_frame(&memo).is_none());
         }
 
         assert_eq!(
-            encode_cave_payment(CavePaymentMemo {
-                purpose: CavePaymentPurpose::Entry,
+            encode_app_payment(AppPaymentMemo {
+                purpose: Purpose(1),
                 reference: [0; 32],
                 recipient: [1; 32],
             }),
-            Err(CavePaymentError::Malformed)
+            Err(AppPaymentError::Malformed)
         );
-        let mut memo = encode_cave_payment(CavePaymentMemo {
-            purpose: CavePaymentPurpose::Entry,
+        let mut memo = encode_app_payment(AppPaymentMemo {
+            purpose: Purpose(1),
             reference: [1; 32],
             recipient: [2; 32],
         })
         .unwrap();
-        memo[CAVE_PAYMENT_LEN] = 1;
+        memo[APP_PAYMENT_LEN] = 1;
         assert_eq!(
-            decode_cave_payment(&memo),
-            Err(CavePaymentError::TrailingBytes)
+            decode_app_payment(&memo),
+            Err(AppPaymentError::TrailingBytes)
         );
-        assert!(decode_cave_payment(&memo[..CAVE_PAYMENT_LEN - 1]).is_err());
-        memo[CAVE_PAYMENT_LEN] = 0;
+        assert!(decode_app_payment(&memo[..APP_PAYMENT_LEN - 1]).is_err());
+        memo[APP_PAYMENT_LEN] = 0;
         memo[3] = 2;
         assert_eq!(
-            decode_cave_payment(&memo),
-            Err(CavePaymentError::UnknownVersion(2))
+            decode_app_payment(&memo),
+            Err(AppPaymentError::UnknownVersion(2))
         );
-        memo[3] = CAVE_PAYMENT_VERSION;
+        // The purpose byte is the application's to define: any non-zero code
+        // is carried through untouched, and the application refuses the ones
+        // it does not know. Zero is reserved, so an all-zero memo can never
+        // parse as a payment.
+        memo[3] = APP_PAYMENT_VERSION;
         memo[4] = 9;
         assert_eq!(
-            decode_cave_payment(&memo),
-            Err(CavePaymentError::UnknownPurpose(9))
+            decode_app_payment(&memo).map(|p| p.purpose),
+            Ok(Purpose(9)),
+            "an unrecognised purpose is the application's to reject, not the frame's"
+        );
+        memo[4] = 0;
+        assert_eq!(
+            decode_app_payment(&memo),
+            Err(AppPaymentError::InvalidPurpose(0))
         );
     }
 }
@@ -666,13 +669,13 @@ mod publication_tests {
     fn a_publication_is_not_an_anchor_and_not_a_deposit() {
         let m = encode_publication(&D);
         assert!(!is_anchor(&m));
-        assert!(!has_cave_payment_tag(&m));
+        assert!(!has_app_payment_tag(&m));
         assert!(decode(&m).is_err(), "not an account memo either");
 
         // And nothing else is a publication.
         assert!(!is_publication(&encode(&[7u8; 32])));
         assert!(!is_publication(&[0u8; MEMO_FIELD]));
-        assert!(!is_publication(b"ZYP"), "the tag alone is not a digest");
+        assert!(!is_publication(b"ZEP"), "the tag alone is not a digest");
     }
 
     #[test]

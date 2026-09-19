@@ -40,13 +40,13 @@ pub type AssetId = [u8; 32];
 pub struct ObservedDeposit {
     /// Transaction identifier on the custodying chain.
     pub txid: [u8; 32],
-    /// The Zyn account it credits, from the deposit's memo or its derived
+    /// The account it credits, from the deposit's memo or its derived
     /// address.
     pub account: AccountId,
     pub amount: Fixed,
     /// Block height it was mined at.
     pub height: u64,
-    /// The Zyn asset this credits, when the chain view knows more than one —
+    /// The asset this credits, when the chain view knows more than one —
     /// a vault that holds SOL and mirrored NFTs. `None` means the bridge's
     /// own asset.
     pub asset: Option<AssetId>,

@@ -1,6 +1,6 @@
 //! The block server's wire protocol, and a client for it.
 //!
-//! Length-prefixed frames over TCP, one request per frame, like the Zyn RPC.
+//! Length-prefixed frames over TCP, one request per frame.
 //! Everything a wallet needs to scan and spend from a device that holds its
 //! own keys: what chain this is, compact blocks in ranges, a full transaction
 //! by id, a tree state to seed a note tree, and a way to broadcast. Nothing

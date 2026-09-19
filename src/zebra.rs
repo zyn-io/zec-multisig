@@ -8,8 +8,8 @@
 //!
 //! # Transparent only, and why that is a scaffold
 //!
-//! This watches **transparent** addresses. That is not the design: ZynZap's
-//! deposits are shielded, custody is Orchard, and `zyn-custody`'s signing is
+//! This watches **transparent** addresses. That is not the design: this crate`s
+//! deposits are shielded, custody is Orchard, and its signing is
 //! FROST over RedPallas because RedPallas is Orchard's spend-authorisation
 //! scheme.
 //!
@@ -191,7 +191,7 @@ impl Zebra {
     fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
         let body = serde_json::json!({
             "jsonrpc": "1.0",
-            "id": "zyn",
+            "id": "zec-multisig",
             "method": method,
             "params": params,
         })

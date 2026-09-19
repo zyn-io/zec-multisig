@@ -31,7 +31,7 @@ pub const OP_ROUND2: u8 = 2;
 /// it does not have.
 pub const OP_ED25519_ROUND1: u8 = 3;
 pub const OP_ED25519_ROUND2: u8 = 4;
-/// Threshold signing for a **Zyn treasury** account. The same Ed25519
+/// Threshold signing for a **treasury** account. The same Ed25519
 /// ciphersuite and the same two rounds as the Ed25519 path — the message is an
 /// opaque payload either way — but a different key, so it needs its own slot
 /// rather than borrowing the vault's.
@@ -268,7 +268,7 @@ fn ed25519_id_bytes(id: Ed25519Id) -> Vec<u8> {
 pub struct Custodian {
     pub zcash: Option<Participant>,
     pub ed25519: Option<Ed25519Participant>,
-    /// The Zyn treasury share, if this box holds one. Same ciphersuite as
+    /// The treasury share, if this box holds one. Same ciphersuite as
     /// `ed25519` and therefore the same participant type, but a distinct key:
     /// spending the vault and acting as the treasury are different authorities
     /// and must never be one slot.
@@ -485,10 +485,10 @@ impl Quorum for RemoteQuorum {
                     out.insert(id, commitments);
                 }
                 Some(_) => eprintln!(
-                    "zyn-custody: {} answered round one with the wrong shape",
+                    "custody: {} answered round one with the wrong shape",
                     addr
                 ),
-                None => eprintln!("zyn-custody: {} did not answer round one", addr),
+                None => eprintln!("custody: {} did not answer round one", addr),
             }
         }
         out
@@ -557,7 +557,7 @@ impl Ed25519Quorum for RemoteEd25519Quorum {
                 Some((id, c)) => {
                     out.insert(id, c);
                 }
-                None => eprintln!("zyn-custody: {} did not answer ed25519 round one", addr),
+                None => eprintln!("custody: {} did not answer ed25519 round one", addr),
             }
         }
         out

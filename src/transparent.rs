@@ -1,6 +1,6 @@
 //! The doormat: transparent receiving, so money can get *in*.
 //!
-//! Zyn is shielded everywhere it matters, and the vault refuses transparent
+//! This is shielded everywhere it matters, and the vault refuses transparent
 //! custody outright (`zebra.rs`, and DECISIONS §38.4). None of that helps a
 //! person holding ZEC on an exchange, because **every exchange pays out to a
 //! transparent address**. A wallet that cannot receive one cannot be funded

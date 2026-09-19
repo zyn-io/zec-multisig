@@ -3,7 +3,7 @@
 //! A [`Participant`] holds exactly one FROST share and answers the two rounds
 //! a coordinator drives — round one commits to nonces, round two releases a
 //! share. It is the same work [`crate::signing::Session`] does, wrapped so it
-//! can live behind a socket ([`crate::bin`] `zyn-custodian`) or be driven in
+//! can live behind a socket (a custodian daemon) or be driven in
 //! process ([`crate::signing::LocalQuorum`]). Either way the share never
 //! leaves the machine: commitments and signature shares cross the boundary,
 //! and neither reveals a key.

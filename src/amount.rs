@@ -1,6 +1,6 @@
 //! Deterministic fixed-point arithmetic — part of the microchain VM spec.
 //!
-//! Every Zyn VM that moves value uses this type. It lives in the spec rather
+//! Every component that moves value uses this type. It lives here rather
 //! than in an application because two VMs that round differently cannot be
 //! settled against the same commitment, and because a VM author reimplementing
 //! fixed-point is a VM author reimplementing a class of bug.
