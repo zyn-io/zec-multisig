@@ -38,9 +38,17 @@ than half-answered.
 
 ## Status
 
-Extracted from a system that has run 2-of-3 threshold custody with the
-coordinator holding no share. Published so the operational half of shielded
-threshold custody is not something every project has to rediscover.
+Extracted from a system running 2-of-3 threshold custody with the coordinator
+holding no share. Published so the operational half of shielded threshold
+custody is not something every project has to rediscover.
+
+**A signature this code produced authorised a shielded spend on Zcash mainnet
+on 21 September 2026** — transaction
+[`e4e66e727475429093147e60f5924fd1111ac4276aa9dee3dea844cd0eda87e6`](https://blockchair.com/zcash/transaction/e4e66e727475429093147e60f5924fd1111ac4276aa9dee3dea844cd0eda87e6),
+an Ironwood bundle whose spend authorisation was aggregated from two of three
+shares held on separate machines. The third custodian was unreachable at the
+time and the quorum formed without it, which is the property the whole design
+exists for.
 
 This has not been independently audited. The cryptography it depends on has
 been (NCC Group, Least Authority, on `frost-core`); the assembly around it
