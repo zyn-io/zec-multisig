@@ -9,6 +9,7 @@
 use std::path::Path;
 
 use frost_core::Ciphersuite;
+use zeroize::Zeroizing;
 
 use crate::ceremony::{IdentifierFor, ThresholdKeys};
 
@@ -54,7 +55,11 @@ pub fn save<C: Ciphersuite>(
     }
     for (id, k) in keys {
         let name = format!("share-{}.bin", hex(&id.serialize()));
-        write_secret(&dir.join(name), &k.key_package.serialize().map_err(bad)?)?;
+        // Serialising materialises the secret share as plain bytes. Without
+        // `Zeroizing` those bytes are freed, not erased, and stay legible in
+        // whatever allocates that memory next — or in a core dump.
+        let bytes = Zeroizing::new(k.key_package.serialize().map_err(bad)?);
+        write_secret(&dir.join(name), &bytes)?;
     }
     if let Some((_, k)) = keys.first() {
         std::fs::write(
@@ -92,8 +97,9 @@ pub fn load<C: Ciphersuite>(
         if !name.to_string_lossy().starts_with("share-") {
             continue;
         }
-        let kp = frost_core::keys::KeyPackage::<C>::deserialize(&std::fs::read(dir.join(&name))?)
-            .map_err(bad)?;
+        // Same on the way back in: the file's bytes are the share.
+        let raw = Zeroizing::new(std::fs::read(dir.join(&name))?);
+        let kp = frost_core::keys::KeyPackage::<C>::deserialize(&raw).map_err(bad)?;
         out.push((
             *kp.identifier(),
             ThresholdKeys {
@@ -150,5 +156,51 @@ mod permissions {
         let back = load::<crate::ceremony::Zcash>(&dir).expect("load");
         assert_eq!(back.len(), keys.len());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod wiping {
+    /// Every place a secret becomes plain bytes must wipe them.
+    ///
+    /// `frost_core` zeroizes its own secret types — `SecretPackage`,
+    /// `KeyPackage`, `SigningShare` are all `ZeroizeOnDrop` — so what is left
+    /// to us are the buffers this crate creates on the way to and from disk
+    /// and the wire. A `Vec` that is merely freed stays legible in whatever
+    /// allocates that memory next, and in a core dump.
+    ///
+    /// Asserted against the source because there is no way to observe a freed
+    /// allocation from a test without inviting undefined behaviour, and a
+    /// comment alone is not a check.
+    #[test]
+    fn secret_buffers_are_zeroized() {
+        // Only the real code: these files' own test modules quote the very
+        // lines being looked for, and a test that matches itself proves
+        // nothing.
+        let upto = |src: &'static str| -> &'static str {
+            match src.find("#[cfg(test)]") {
+                Some(i) => &src[..i],
+                None => src,
+            }
+        };
+        for (file, src) in [
+            ("shares.rs", upto(include_str!("shares.rs"))),
+            ("dkg_net.rs", upto(include_str!("dkg_net.rs"))),
+        ] {
+            for (what, line) in [
+                ("a share written to disk", "k.key_package.serialize()"),
+                ("a share read from disk", "std::fs::read(dir.join(&name))"),
+                ("a round-two package sealed to a peer", "package.serialize()"),
+                ("a round-two package opened from a peer", "open(&self.seal, peer, ct)"),
+            ] {
+                if let Some(at) = src.find(line) {
+                    let stmt = &src[src[..at].rfind('\n').map(|i| i + 1).unwrap_or(0)..at];
+                    assert!(
+                        stmt.contains("Zeroizing::new"),
+                        "{file}: {what} is not wiped — `{line}` should be inside Zeroizing::new"
+                    );
+                }
+            }
+        }
     }
 }

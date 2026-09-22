@@ -17,6 +17,8 @@ categories = ["cryptography::cryptocurrencies"]
 # the key ceremony, the wire protocol share-holders speak, note selection and
 # witnesses, and the spend assembly. That gap is the work.
 [dependencies]
+# Wipes the buffers a share passes through on its way to and from disk.
+zeroize = { version = "1", features = ["zeroize_derive"] }
 reddsa = { version = "0.5", features = ["frost"] }
 frost-rerandomized = "3"
 frost-ed25519 = "3"

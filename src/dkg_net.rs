@@ -22,6 +22,7 @@ use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use frost_core::keys::dkg;
 use x25519_dalek::{PublicKey as XPublic, StaticSecret};
+use zeroize::Zeroizing;
 
 use crate::ceremony::{CeremonyError, IdentifierFor, ThresholdKeys, Zcash};
 use frost_core::Ciphersuite;
@@ -158,7 +159,11 @@ impl<C: Ciphersuite> DkgParticipant<C> {
         self.r2_secret = Some(s2);
         let mut sealed = BTreeMap::new();
         for (to, package) in p2 {
-            let bytes = package.serialize().map_err(|_| CeremonyError::Crypto)?;
+            // A round-two package carries one participant's share of the
+            // secret. Serialising it puts that share in plain memory on its
+            // way into the sealed envelope, and freeing a Vec does not erase
+            // it — so it is wiped when this binding drops.
+            let bytes = Zeroizing::new(package.serialize().map_err(|_| CeremonyError::Crypto)?);
             let peer = self.seal_pubs.get(&to).ok_or(CeremonyError::Incomplete)?;
             sealed.insert(to, seal(&self.seal, peer, &bytes)?);
         }
@@ -181,7 +186,8 @@ impl<C: Ciphersuite> DkgParticipant<C> {
         let mut r2_for_me = BTreeMap::new();
         for (from, ct) in sealed_for_me {
             let peer = self.seal_pubs.get(from).ok_or(CeremonyError::Incomplete)?;
-            let bytes = open(&self.seal, peer, ct)?;
+            // The opened plaintext is a share addressed to us. Same reason.
+            let bytes = Zeroizing::new(open(&self.seal, peer, ct)?);
             r2_for_me.insert(
                 *from,
                 dkg::round2::Package::<C>::deserialize(&bytes)
